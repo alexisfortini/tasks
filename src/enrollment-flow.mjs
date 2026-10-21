@@ -1,4 +1,10 @@
-import { verifyPersonal, verifyEnrollmentScopes } from './identity.mjs';
+import { PERSONAL_EMAIL, READ_SCOPES, WRITE_SCOPES, verifyPersonal, verifyEnrollmentScopes, verifyScopes } from './identity.mjs';
+
+export function renewalProfile(saved) {
+  if (!PERSONAL_EMAIL || saved?.email !== PERSONAL_EMAIL || !saved.clientId || !saved.clientSecret || !saved.sub) throw new Error('PERSONAL_ACCOUNT_REQUIRED');
+  const requiredAccess = verifyScopes(saved.tokens?.scope);
+  return {enrollment:{requiredAccess,scopes:requiredAccess === 'write' ? WRITE_SCOPES : READ_SCOPES},client:{client_id:saved.clientId,client_secret:saved.clientSecret},expectedSubject:saved.sub};
+}
 
 const stages = new Set(['arguments','client_file','client_type','loopback','browser_consent','token_exchange','identity','scope','encrypted_storage']);
 
@@ -14,7 +20,7 @@ export function safeEnrollmentDiagnostic(stage, error) {
 
 }
 
-export async function finishEnrollment({auth,tokens,client,nonce,requiredAccess,save,stage}) {
+export async function finishEnrollment({auth,tokens,client,nonce,expectedSubject,requiredAccess,save,stage}) {
 
   stage('identity');
 
@@ -24,23 +30,18 @@ export async function finishEnrollment({auth,tokens,client,nonce,requiredAccess,
 
   const claims = ticket.getPayload();
 
-  try {
+  // Google revocation can invalidate the entire project's grant, including
+  // older tokens. On a validation failure preserve the existing vault and
+  // leave any grant removal to a separately reviewed user action.
+  verifyPersonal(claims);
 
-    verifyPersonal(claims);
+  if (expectedSubject !== undefined && claims.sub !== expectedSubject) throw new Error('PERSONAL_ACCOUNT_REQUIRED');
 
-    if (claims.nonce !== nonce) throw new Error('GRANT_MISMATCH');
+  if (claims.nonce !== nonce) throw new Error('GRANT_MISMATCH');
 
-    stage('scope');
+  stage('scope');
 
-    verifyEnrollmentScopes(tokens.scope,requiredAccess);
-
-  } catch (error) {
-
-    await auth.revokeToken(tokens.refresh_token).catch(() => {});
-
-    throw error;
-
-  }
+  verifyEnrollmentScopes(tokens.scope,requiredAccess);
 
   stage('encrypted_storage');
 

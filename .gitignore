@@ -2,6 +2,7 @@ node_modules/
 .package-store/
 .private/
 .runtime/
+connection/background-status.txt
 tools/
 connection/profiles/
 connection/*.exe
@@ -11,6 +12,8 @@ connection/offline-profile-results.json
 *.log
 stdout
 .env*
+!.env.example
+work/
 client_secret*.json
 *.dpapi
 *.tmp

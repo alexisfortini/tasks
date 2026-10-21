@@ -1,4 +1,4 @@
-import {readFile,writeFile,rename,unlink} from 'node:fs/promises';
+import {readFile,open,rename,unlink} from 'node:fs/promises';
 
 import {createHash,randomUUID} from 'node:crypto';
 
@@ -9,6 +9,13 @@ import {PERSONAL_EMAIL} from './identity.mjs';
 import {canonical,OPERATIONS} from './approvals.mjs';
 
 const fail=code=>{throw new TaskError(code);};
+
+// Flush attempt guards before calling Google, so a power interruption cannot
+// turn an already-sent creation into an apparently unattempted request.
+async function writeFile(target,text){
+  const file=await open(target,'wx');
+  try{await file.writeFile(text);await file.sync();}finally{await file.close();}
+}
 
 export const DESTRUCTIVE=['deleteTask','deleteTasklist','clearCompleted'];
 

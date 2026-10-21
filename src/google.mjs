@@ -8,6 +8,13 @@ import { vault } from './vault.mjs';
 
 import { PERSONAL_EMAIL, verifyPersonal, verifyScopes } from './identity.mjs';
 
+// OAuth2Client otherwise replays 401/403 requests when token expiry is missing,
+// even with Gaxios retry:false. Proactive token refresh still works; mutations
+// must never be sent a second time automatically after reaching Google.
+export class SingleAttemptOAuth2Client extends OAuth2Client {
+  requestAsync(options) { return super.requestAsync(options, true); }
+}
+
 export async function connectGoogle() {
 
   if (!PERSONAL_EMAIL) throw new TaskError('ACCOUNT_CONFIGURATION_REQUIRED');
@@ -17,7 +24,7 @@ export async function connectGoogle() {
 
   const tasksAccess = verifyScopes(saved.tokens.scope);
 
-  const auth = new OAuth2Client(saved.clientId, saved.clientSecret);
+  const auth = new SingleAttemptOAuth2Client(saved.clientId, saved.clientSecret);
 
   auth.setCredentials(saved.tokens);
 

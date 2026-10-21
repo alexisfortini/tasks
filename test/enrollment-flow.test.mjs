@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {finishEnrollment,safeEnrollmentDiagnostic} from '../src/enrollment-flow.mjs';
+import {finishEnrollment,safeEnrollmentDiagnostic,renewalProfile} from '../src/enrollment-flow.mjs';
 import {READ_SCOPES,WRITE_SCOPES,PERSONAL_EMAIL} from '../src/identity.mjs';
 function fixture() {
   const events=[]; const saved=[]; const revoked=[];
@@ -25,19 +25,34 @@ test('mock read-only enrollment verifies identity and scope before protected sav
   assert.deepEqual(f.events,['identity','scope','encrypted_storage']);
   assert.equal(f.saved.length,1);assert.equal(f.saved[0].email,PERSONAL_EMAIL);assert.equal(f.revoked.length,0);
 });
-test('mock wrong-account and nonce failures revoke only new mock grant and never save',async()=>{
+test('wrong-account and nonce failures preserve the vault without automatically revoking any Google grant',async()=>{
   for(const change of [{email:'wrong@example.test'},{nonce:'wrong'}]){
     const f=fixture();Object.assign(f.claims,change);
-    await assert.rejects(finishEnrollment(f.args));assert.equal(f.saved.length,0);assert.deepEqual(f.revoked,['mock-refresh']);
+    await assert.rejects(finishEnrollment(f.args));assert.equal(f.saved.length,0);assert.deepEqual(f.revoked,[]);
   }
 });
 test('mock missing offline grant and unexpectedly broad scope cannot save',async()=>{
   const missing=fixture();delete missing.args.tokens.refresh_token;
   await assert.rejects(finishEnrollment(missing.args),/OFFLINE_GRANT_REQUIRED/);assert.equal(missing.saved.length,0);
   const broad=fixture();broad.args.tokens.scope=WRITE_SCOPES.join(' ');
-  await assert.rejects(finishEnrollment(broad.args),/GRANT_MISMATCH/);assert.equal(broad.saved.length,0);assert.equal(broad.events.at(-1),'scope');
+  await assert.rejects(finishEnrollment(broad.args),/GRANT_MISMATCH/);assert.equal(broad.saved.length,0);assert.equal(broad.events.at(-1),'scope');assert.deepEqual(broad.revoked,[]);
 });
 test('mock storage failure preserves safe stage without reporting exception details',async()=>{
   const f=fixture();f.args.save=async()=>{throw new Error('VAULT_OPERATION_FAILED');};
   await assert.rejects(finishEnrollment(f.args),error=>safeEnrollmentDiagnostic(f.events.at(-1),error)==='ENROLLMENT_FAILED stage=encrypted_storage code=VAULT_OPERATION_FAILED');
+});
+
+test('grant renewal reuses the encrypted client and preserves the existing read or write scope',()=>{
+  for(const scopes of [READ_SCOPES,WRITE_SCOPES]){
+    const profile=renewalProfile({email:PERSONAL_EMAIL,sub:'mock-sub',clientId:'mock-client',clientSecret:'mock-secret',tokens:{scope:scopes.join(' ')}});
+    assert.deepEqual(profile.enrollment.scopes,scopes);assert.equal(profile.expectedSubject,'mock-sub');
+    assert.deepEqual(profile.client,{client_id:'mock-client',client_secret:'mock-secret'});
+  }
+  assert.throws(()=>renewalProfile({email:'wrong@example.test'}),/PERSONAL_ACCOUNT_REQUIRED/);
+});
+
+test('grant renewal refuses a changed Google subject and does not overwrite the existing vault',async()=>{
+  const f=fixture();f.args.expectedSubject='different-sub';
+  await assert.rejects(finishEnrollment(f.args),/PERSONAL_ACCOUNT_REQUIRED/);
+  assert.deepEqual(f.saved,[]);assert.deepEqual(f.revoked,[]);
 });

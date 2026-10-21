@@ -1,5 +1,5 @@
 {
-  "name": "google-tasks-desktop-mcp",
+  "name": "tasks",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build:windows": "node scripts/build-windows.mjs",
+    "install:startup": "node scripts/install-startup.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "configure": "node scripts/configure.mjs",
     "test": "node scripts/test.mjs",
     "audit:share": "node scripts/audit-share.mjs",

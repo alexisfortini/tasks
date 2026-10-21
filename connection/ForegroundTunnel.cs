@@ -38,7 +38,10 @@ internal static class ForegroundTunnel {
 
     try {
 
+      using (var job = new TunnelSupport.ChildJob())
       using (var child = Process.Start(start)) {
+
+        try { job.Add(child); } catch { try { child.Kill(); } catch { } throw; }
 
         active = child;
 
@@ -75,6 +78,9 @@ internal static class ForegroundTunnel {
     }
 
     if (args.Length != 0) { Console.Error.WriteLine("LAUNCHER_ARGUMENTS_REJECTED"); return 1; }
+
+    using (var instance = TunnelSupport.Instance()) {
+    if (instance == null) { Console.Error.WriteLine("TUNNEL_ALREADY_RUNNING"); return 1; }
 
     Console.CancelKeyPress += delegate(object sender, ConsoleCancelEventArgs e) {
 
@@ -150,6 +156,7 @@ internal static class ForegroundTunnel {
 
     }
 
+    }
   }
 
 }

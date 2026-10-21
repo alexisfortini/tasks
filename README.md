@@ -1,4 +1,4 @@
-# Google Tasks Desktop MCP
+# Tasks
 
 A private Google Tasks MCP server for an always-on Windows desktop. Connect an assistant directly over stdio or through OpenAI Secure MCP Tunnel; routine reads and edits need no delegated desktop worker. Each operator configures their own Google account, OAuth client and private connection.
 
@@ -26,11 +26,21 @@ Requirements: Git, Node 22 or 24, pnpm 10.32.1, Windows x64 with the .NET Framew
 ```powershell
 pnpm install --frozen-lockfile
 pnpm build:windows
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 pnpm configure --account-email you@example.com
+pnpm doctor
 pnpm test
 ```
 
 Use your actual intended personal Google address in the configure command. It creates an ignored account pin and **restricted** capability configuration. It does not create a Google grant, change network settings, start a tunnel or install a service. An environment variable GOOGLE_TASKS_ACCOUNT_EMAIL can provide the same explicit pin; an absent/malformed pin fails closed before credentials are loaded.
+
+### Local environment file
+
+The repository-root `.env` supports only `GOOGLE_TASKS_ACCOUNT_EMAIL`, `GOOGLE_TASKS_TUNNEL_ID`, and `CONTROL_PLANE_API_KEY`. Copy the empty-value `.env.example` once; leave existing `.env` files in place. Process environment settings take precedence. Blank local values keep the existing account pin, tunnel profile, or encrypted runtime-key fallback. Unknown variables are not exported as execution or logging options.
+
+`CONTROL_PLANE_API_KEY` is a Restricted **OpenAI tunnel runtime key**, not a Google token. After approving its creation/storage, run `connection/background-tunnel.exe --configure-env-key` and enter it in the local password dialog. This saves plaintext only in the ignored `.env`, with a file ACL restricted to your Windows account. Keep the key on one line, optionally quoted, with at most one key assignment. Alternatively, `--configure-key` retains encrypted DPAPI storage. Google refresh tokens and Desktop client secrets remain in the encrypted `.private` vault; never copy them into `.env`. See [tunnel setup](docs/TUNNEL.md).
+
+`pnpm doctor` checks local configuration without network calls or credential values. It does not prove that Google consent is valid or that cloud calls succeed. The privacy audit includes new source files and rejects populated `.env.example` templates as well as any committed `.env` file.
 
 ### Authorize Google
 
@@ -60,6 +70,8 @@ Do this only when you approve ongoing editing of the pinned account. No task/lis
 A local stdio client can launch `node src/server.mjs`. A cloud ChatGPT connection needs a supported private tunnel route or another authenticated deployment; a local Codex entry alone does not connect a cloud chat.
 
 [Secure tunnel setup](docs/TUNNEL.md) describes the private outbound route, masked runtime-key launcher and workspace requirements. It uses your own tunnel and key, has no public unauthenticated ingress and requires no paid middleware. OpenAI account/product permissions and pricing are separate from this project.
+
+For Windows sign-in startup, build the helpers, configure the approved runtime key using either local storage option above, then run pnpm install:startup. The per-user task runs in the background and restarts failed tunnel processes. See [automatic startup](docs/TUNNEL.md#automatic-desktop-startup) for verification, relocation and removal. A valid Google grant is still required.
 
 After changing server metadata: restart your server, refresh the connection on ChatGPT web, confirm the schema, then use a new conversation and re-test. Existing tool names can retain incompatible cached connector schemas. Versioned write names ending in `_v2`, required requestId and server receipts prevent a missing retry key from silently bypassing safeguards. See [Troubleshooting](docs/TROUBLESHOOTING.md). Versioned schema behavior is verified with the real SDK and mocks; cloud caching behavior still needs validation in each target account.
 

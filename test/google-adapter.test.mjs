@@ -1,5 +1,20 @@
 import test from 'node:test';
 
+import {SingleAttemptOAuth2Client} from '../src/google.mjs';
+
+test('real OAuth client does not replay 401/403 mutations even when saved token expiry is absent',async()=>{
+  for(const status of [401,403]){
+    const auth=new SingleAttemptOAuth2Client('mock-client','mock-secret');
+    auth.setCredentials({access_token:'mock-access',refresh_token:'mock-refresh'});
+    let sends=0,refreshes=0;
+    auth.refreshAccessTokenAsync=async()=>{refreshes++;return{credentials:{access_token:'mock-refreshed'}};};
+    const failure=Object.assign(new Error('mock auth failure'),{response:{status,config:{data:'{}'}}});
+    auth.transporter.request=async()=>{sends++;throw failure;};
+    await assert.rejects(auth.request({url:'https://tasks.googleapis.com/tasks/v1/lists/mock/tasks',method:'POST',data:{title:'synthetic'},retry:false}),error=>error===failure);
+    assert.equal(sends,1);assert.equal(refreshes,0);
+  }
+});
+
 import assert from 'node:assert/strict';
 
 import { createTasksAdapter } from '../src/google.mjs';

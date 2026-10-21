@@ -14,7 +14,7 @@ import { OAuth2Client } from 'google-auth-library';
 
 import { PERSONAL_EMAIL, enrollmentProfile } from './identity.mjs';
 
-import { finishEnrollment, safeEnrollmentDiagnostic } from './enrollment-flow.mjs';
+import { finishEnrollment, safeEnrollmentDiagnostic, renewalProfile } from './enrollment-flow.mjs';
 
 import { vault } from './vault.mjs';
 
@@ -25,17 +25,19 @@ const stage = value => { currentStage = value; };
 async function enroll() {
 
   if (!PERSONAL_EMAIL) throw new Error('ACCOUNT_CONFIGURATION_REQUIRED');
-  const enrollment = enrollmentProfile(process.argv.slice(2));
-
-  stage('client_file');
-
-  const input = JSON.parse(await readFile(enrollment.clientPath, 'utf8'));
-
-  stage('client_type');
-
-  if (!input.installed?.client_id || !input.installed?.client_secret) throw new Error('DESKTOP_CLIENT_REQUIRED');
-
-  const client = input.installed;
+  const args = process.argv.slice(2);
+  let enrollment, client, expectedSubject;
+  if (args.length === 1 && args[0] === '--renew-existing-grant') {
+    stage('client_file');
+    ({enrollment,client,expectedSubject} = renewalProfile(await vault('load')));
+  } else {
+    enrollment = enrollmentProfile(args);
+    stage('client_file');
+    const input = JSON.parse(await readFile(enrollment.clientPath, 'utf8'));
+    stage('client_type');
+    if (!input.installed?.client_id || !input.installed?.client_secret) throw new Error('DESKTOP_CLIENT_REQUIRED');
+    client = input.installed;
+  }
 
   const state = randomBytes(32).toString('hex'), nonce = randomBytes(32).toString('hex');
 
@@ -95,7 +97,7 @@ async function enroll() {
 
     const { tokens } = await auth.getToken({ code, codeVerifier: pkce.codeVerifier, redirect_uri: redirectUri });
 
-    await finishEnrollment({auth,tokens,client,nonce,requiredAccess:enrollment.requiredAccess,save:value => vault('save',value),stage});
+    await finishEnrollment({auth,tokens,client,nonce,expectedSubject,requiredAccess:enrollment.requiredAccess,save:value => vault('save',value),stage});
 
     process.stdout.write(enrollment.requiredAccess === 'read' ? 'Personal read-only Google authorization stored securely. Writes are blocked.\n' : 'Personal Google authorization stored securely. Writes remain disabled until capability configuration is explicitly enabled.\n');
 

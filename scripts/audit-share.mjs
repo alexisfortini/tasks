@@ -1,5 +1,7 @@
 import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
+import {parseEnv} from 'node:util';
+import {ENV_KEYS} from '../src/environment.mjs';
 const git=process.env.GIT_BIN??'git';
 const run=args=>execFileSync(git,args,{encoding:'utf8',maxBuffer:16*1024*1024});
 const forbiddenPaths=/(^|\/)(\.private|\.runtime|node_modules|tools|cleanup-archive)(\/|$)|(^|\/)(\.env[^/]*|client_secret[^/]*|health\.url|foreground\.pid)$|\.(dpapi|exe|log|zip)$/i;
@@ -15,14 +17,18 @@ const rules=[
   ['bound-tunnel-or-plugin-id',/\b(?:tunnel_|plugins_|pluginrel)[a-f0-9]{16,}/]
 ];
 export function inspectText(name,text){
-  const issues=[];if(forbiddenPaths.test(name))issues.push('generated-or-private-path');
+  const issues=[];if(forbiddenPaths.test(name)&&name!=='.env.example')issues.push('generated-or-private-path');
+  if(name==='.env.example'){
+    try{if(Object.entries(parseEnv(text)).some(([key,value])=>!ENV_KEYS.includes(key)||value!==''))issues.push('nonempty-or-unsupported-env-template');}
+    catch{issues.push('invalid-env-template');}
+  }
   for(const [kind,pattern]of rules)if(pattern.test(text))issues.push(kind);
   return issues;
 }
 if(process.argv[1]?.endsWith('audit-share.mjs')){
   const problems=[];
   function inspect(name,text){for(const issue of inspectText(name,text))problems.push({file:name,kind:issue});}
-  const tracked=run(['ls-files','-z']).split('\0').filter(Boolean);
+  const tracked=run(['ls-files','--cached','--others','--exclude-standard','-z']).split('\0').filter(Boolean);
   for(const name of tracked)inspect(name,readFileSync(name,'utf8'));
   let commits=[];try{commits=run(['rev-list','--all']).trim().split('\n').filter(Boolean);}catch{}
   let blobs=0;

@@ -8,4 +8,8 @@ Enrollment verifies PKCE, state, nonce, verified email, expected account and sta
 
 Google can expire or revoke refresh tokens. External consent screens left in Testing normally issue refresh tokens with a seven-day lifetime when Tasks scopes are requested; do not treat this as a server regression. Any production publishing/verification decision belongs to your project owner and may require Google's review. Re-enrollment is a human-approved action, not an automated retry loop.
 
+To renew an expired/revoked existing grant without recovering a plaintext client JSON file, run node src/enroll.mjs --renew-existing-grant. It reuses the encrypted Desktop OAuth client and requests the same read or write scope already stored. The browser still requires your account selection and consent. The account email and original Google subject must match before replacing the encrypted vault; existing capability settings and journals are preserved.
+
+Failed validation leaves the existing vault unchanged and does not automatically revoke tokens. Google's revocation endpoint can invalidate all grants/tokens for the user's project, so grant removal requires a separate reviewed user action. A newly issued authorization may remain on the Google account after a failed enrollment; review it manually rather than running an automatic cleanup revocation. This applies to initial enrollment and renewal and does not expand requested scopes.
+
 Official guidance: [Desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app), [refresh-token expiration](https://developers.google.com/identity/protocols/oauth2#expiration).
